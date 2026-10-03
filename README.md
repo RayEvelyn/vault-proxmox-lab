@@ -116,7 +116,7 @@ Run on the Proxmox lab node. The custom role avoids full administrator privilege
 
 ```bash
 pveum user add terraform-lab@pve --comment 'Disposable Terraform lab'
-pveum role add LabTerraform --privs 'Datastore.AllocateSpace Datastore.Audit Sys.Audit VM.Allocate VM.Audit VM.Clone VM.Config.CDROM VM.Config.CPU VM.Config.Cloudinit VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options VM.PowerMgmt'
+pveum role add LabTerraform --privs 'Datastore.AllocateSpace Datastore.Audit Sys.Audit VM.Allocate VM.Audit VM.Clone VM.Config.CDROM VM.Config.CPU VM.Config.Cloudinit VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options VM.PowerMgmt SDN.Use'
 pveum acl modify / --user terraform-lab@pve --role LabTerraform
 pveum user token add terraform-lab@pve lab --privsep 1
 pveum acl modify / --token 'terraform-lab@pve!lab' --role LabTerraform
@@ -126,8 +126,7 @@ The token secret is shown once. Save it in your password manager; never paste it
 
 ```bash
 export PROXMOX_VE_ENDPOINT='https://pve.example.test:8006/'
-read -rsp 'Proxmox API token secret: ' LAB_TOKEN; printf '
-'
+read -rsp 'Proxmox API token secret: ' LAB_TOKEN; printf '\n'
 export PROXMOX_VE_API_TOKEN='terraform-lab@pve!lab='"$LAB_TOKEN"
 unset LAB_TOKEN
 cp terraform.tfvars.example terraform.tfvars
