@@ -1,4 +1,5 @@
 terraform {
+  backend "local" {}
   required_version = ">= 1.6, < 2.0"
   required_providers {
     proxmox = { source = "bpg/proxmox", version = "0.115.0" }
@@ -9,6 +10,7 @@ terraform {
 provider "proxmox" {}
 
 resource "proxmox_virtual_environment_vm" "lab" {
+  lifecycle { prevent_destroy = true }
   name      = var.vm_name
   node_name = var.node_name
   vm_id     = var.vm_id

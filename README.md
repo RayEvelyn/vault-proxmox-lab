@@ -2,7 +2,7 @@
 
 Start with [GitOps, the bootstrap order, and why the repos are separate](docs/START-HERE.md).
 
-This beginner lab creates an Ubuntu VM, then runs a **single-node persistent Vault server** using Raft integrated storage and TLS. SSH bootstrap is also usable on dedicated Ubuntu bare metal. The lab generates its own short-lived TLS certificate on the host; no private keys, Vault root tokens or unseal shares go into Terraform. **Review locally before deploying.**
+This beginner lab creates an Ubuntu VM, then runs a **single-node persistent Vault server** using Raft integrated storage and TLS. SSH bootstrap is also usable on dedicated Ubuntu bare metal. The lab generates its own short-lived TLS certificate on the host; no private keys, Vault root tokens or unseal shares go into Terraform. **Review locally before deploying; real manual CI is opt-in in your private copy.**
 
 ## What Vault gives you — and what it does not
 
@@ -182,3 +182,72 @@ Provider is pinned to **bpg/proxmox 0.115.0**, observed from the official Terraf
 - [bpg provider authentication and permissions](https://registry.terraform.io/providers/bpg/proxmox/latest/docs)
 - [Proxmox cloud-init](https://pve.proxmox.com/wiki/Cloud-Init_Support)
 - [Ubuntu cloud images](https://cloud-images.ubuntu.com/)
+
+## Real CI: validation publicly, deployment in your private copy
+
+The committed `.github/workflows/lab.yml` validates Terraform/Bash/Compose on GitHub-hosted runners without deployment credentials. Its separate `workflow_dispatch` job actually initializes a persistent backend, offers separate **plan**, **provision**, and **deploy** actions (default: plan). Provision applies a saved plan without SSH; deploy applies its saved plan, waits for guest readiness and runs SSH bootstrap. It is gated to a **private repository owned by someone other than RayEvelyn**, `DEPLOY_ENABLED=true`, the actual default branch, environment `homelab`, and a dedicated runner with labels `self-hosted,linux,homelab`. Canonical public teaching repositories cannot deploy through this job. A provision/deploy dispatch authorizes that selected apply/bootstrap phase; this is not a separate post-plan approval gate. Review a plan independently before enabling credentials for consequential targets.
+
+To make your own private copy (these commands create/push only when you run them):
+
+```bash
+# Clone the public teaching repo, inspect it, then create your own PRIVATE copy.
+gh repo clone RayEvelyn/vault-proxmox-lab
+cd vault-proxmox-lab
+gh repo create YOUR_USER/vault-proxmox-lab --private --source . --remote deployment --push
+```
+
+Do not run a self-hosted runner for public/untrusted PR jobs. [GitHub recommends private repositories for self-hosted runners](https://docs.github.com/en/actions/reference/security/secure-use). Runner labels are routing, not security: restrict registration and repository access, review workflow changes, configure supported environment/ref protections, and give the OS runner account only the needed permissions. Keep the runner outside the GitLab VM it bootstraps; rebuilding GitLab must not depend on its own unavailable pipeline. For public examples, hosted validation is the default.
+
+### Persistent state contract
+
+Install Terraform **1.16.5**, Python 3, OpenSSH client, `flock` (util-linux), and CA certificates on one dedicated permanent Linux runner. Pre-create a runner-owned directory with mode0700, for example `/var/lib/homelab-terraform`. Set `TF_STATE_ROOT` to this absolute path **outside checkouts and temporary directories**. Each repository keeps local state under `github-<repository_id>` or `gitlab-<project_id>`. Terraform local backend locking plus a whole-run `flock` and per-repository CI concurrency serialize access on that host. [Terraform local backend](https://developer.hashicorp.com/terraform/language/backend/local)
+
+**Always use the same permanent runner and state path.** A fresh host or changing GitHub/GitLab state IDs starts a different empty state and can duplicate/conflict with resources. Do not register a pool of interchangeable runners for this local-state design. Back up state encrypted off-host with ownership/permissions preserved, test restoration, and record which platform/repository ID owns it. State and plans are never CI caches or artifacts. For teams/multiple hosts, deliberately migrate to a locking remote backend; do not improvise state copying between jobs.
+
+If you already created the VM through local Terraform bootstrap, migrate its existing state to the intended runner/backend **before** enabling CI. Inspect lineage and resource IDs; back up first and use Terraform's supported backend migration/import procedures. Losing the state file does not delete the VM. A plan that proposes recreating an existing GitLab/Vault VM is a stop-and-investigate signal.
+
+### Variables and secrets
+
+Set non-secret repository/environment variables:
+
+| Name | Value |
+|---|---|
+| `DEPLOY_ENABLED` | `true` only after private-copy/runner/state review |
+| `TF_STATE_ROOT` | `/var/lib/homelab-terraform` on the permanent runner |
+| `HOMELAB_TFVARS_JSON` | JSON object matching `terraform.tfvars.example`, public values only |
+| `PROXMOX_VE_ENDPOINT` | Verified HTTPS API endpoint |
+| `LAB_HOSTNAME` | Service DNS name resolving to its VM |
+| `IMAGE` | Exact stable patch image or immutable digest |
+
+Set separate protected secrets `PROXMOX_VE_API_TOKEN`, `SSH_PRIVATE_KEY`; `SSH_KNOWN_HOSTS`, `LAB_HOSTNAME` and `IMAGE` are required only for the deploy phase; optional `PROXMOX_CA_PEM` contains the CA PEM to append to the runner's system trust bundle. Do not put credentials in the JSON variable. `ci/deploy.sh` writes temporary mode0600 files, starts an SSH agent, derives only the public key for cloud-init, and cleans temporary material/generated tfvars on exit. Strict host-key checking and noninteractive SSH are enforced. The target Ubuntu bootstrap account needs narrowly reviewed **passwordless sudo** for this automated path; interactive/manual deployment can use its own sudo policy.
+
+A new VM's SSH host key must be verified through the Proxmox console/another trusted channel and pinned before bootstrap. Use provision first, verify the actual guest host key, set `SSH_KNOWN_HOSTS`, then dispatch deploy against the same preserved state. It deliberately does not use unchecked `ssh-keyscan` as trust. This workflow does not prove application readiness or backup restoration; follow the service acceptance steps above.
+
+Use your CLI to set variables/secrets in your own private copy, without putting secret values in command arguments:
+
+```bash
+gh variable set DEPLOY_ENABLED --body true --repo YOUR_USER/vault-proxmox-lab
+gh variable set TF_STATE_ROOT --body /var/lib/homelab-terraform --repo YOUR_USER/vault-proxmox-lab
+# Secret read from a protected file; no value printed or committed.
+gh secret set SSH_PRIVATE_KEY --repo YOUR_USER/vault-proxmox-lab < /protected/path/deploy-key
+# Complete remaining variables/secrets, then dispatch on your default branch:
+gh workflow run lab.yml --repo YOUR_USER/vault-proxmox-lab --ref main -f action=plan
+# Review, then run action=provision. Pin the verified host key, then action=deploy.
+```
+
+The committed `.gitlab-ci.yml` provides the same helper for private home GitLab imports. Validation uses a credential-free Terraform image; manual deployment requires `DEPLOY_ENABLED=true` and the protected default branch, environment `homelab`, a serialized resource group and a dedicated **shell runner** tagged `homelab`. Configure the same protected env values/secrets through the GitLab API/CLI; do not turn on untrusted MR access to that runner. GitLab and GitHub have different state IDs: migration is an explicit operator task, not automatic failover. No estate-specific pipelines, tokens or auto-apply policies are included.
+
+### First provision, host trust, and replacement protection
+
+On your Proxmox node, inspect the newly created VM's fingerprint through its guest-agent channel:
+
+```bash
+qm guest exec YOUR_VM_ID -- ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+# On your workstation collect a CANDIDATE, then compare its fingerprint manually:
+ssh-keyscan -t ed25519 YOUR_VM_IP > candidate-known-hosts
+ssh-keygen -lf candidate-known-hosts
+# Only after an exact match to the trusted Proxmox result:
+gh secret set SSH_KNOWN_HOSTS --repo YOUR_USER/REPO < candidate-known-hosts
+```
+
+`ssh-keyscan` alone is not verification. Preserve the initial state across plan/provision/deploy. The VM has `prevent_destroy=true`: Terraform replacements/deletion fail rather than deleting your GitLab/Vault data. If intentional retirement is required, back up and test restoration, explicitly review removing this protection in a separate change, then review the destroy plan. It does not protect against deletion outside Terraform. GitLab manual jobs default `HOMELAB_ACTION=plan`; pass a reviewed pipeline/job variable `HOMELAB_ACTION=provision` or `deploy` for the corresponding step.

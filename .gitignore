@@ -10,3 +10,6 @@ secrets/
 *.tar
 *.snap
 .DS_Store
+
+terraform.tfvars.json
+*.tfvars.json

@@ -1,0 +1,71 @@
+name: Validate and manually deploy your private lab
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Plan first; provision VM; verify host key; deploy service
+        type: choice
+        required: true
+        default: plan
+        options: [plan, provision, deploy]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: 1.16.5
+          terraform_wrapper: false
+      - name: Validate without deployment credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/test_ci_contract.py
+          terraform fmt -check
+          terraform init -backend=false -input=false
+          terraform validate
+          for script in scripts/*.sh ci/*.sh; do bash -n "$script"; done
+          LAB_HOSTNAME=lab.example.test IMAGE=example/service:1.0.0 docker compose config --quiet
+  deploy:
+    needs: validate
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.event.repository.private == true &&
+      github.repository_owner != 'RayEvelyn' &&
+      vars.DEPLOY_ENABLED == 'true' &&
+      github.ref_name == github.event.repository.default_branch
+    runs-on: [self-hosted, linux, homelab]
+    environment: homelab
+    concurrency:
+      group: homelab-${{ github.repository_id }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: 1.16.5
+          terraform_wrapper: false
+      - name: Saved-plan apply and SSH bootstrap on your permanent runner
+        shell: bash
+        env:
+          HOMELAB_ACTION: ${{ inputs.action }}
+          TF_STATE_ROOT: ${{ vars.TF_STATE_ROOT }}
+          HOMELAB_STATE_ID: github-${{ github.repository_id }}
+          HOMELAB_TFVARS_JSON: ${{ vars.HOMELAB_TFVARS_JSON }}
+          PROXMOX_VE_ENDPOINT: ${{ vars.PROXMOX_VE_ENDPOINT }}
+          PROXMOX_VE_API_TOKEN: ${{ secrets.PROXMOX_VE_API_TOKEN }}
+          PROXMOX_CA_PEM: ${{ secrets.PROXMOX_CA_PEM }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          LAB_HOSTNAME: ${{ vars.LAB_HOSTNAME }}
+          IMAGE: ${{ vars.IMAGE }}
+        run: ./ci/deploy.sh
