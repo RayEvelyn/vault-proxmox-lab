@@ -8,6 +8,7 @@ compose=$3
 [[ "$hostname" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]+$ ]] || exit 2
 [[ "$image" =~ ^[a-zA-Z0-9./:@_-]+$ && "$image" != *:latest ]] || exit 2
 [[ "$image" =~ ^hashicorp/vault:([0-9]+\.){2}[0-9]+$ || "$image" =~ ^hashicorp/vault@sha256:[a-f0-9]{64}$ ]] || { echo 'Use an exact stable patch tag or SHA256 digest.' >&2; exit 2; }
+# shellcheck source=/dev/null
 source /etc/os-release
 [[ "$ID" == ubuntu && "$VERSION_ID" == 24.04 ]] || { echo 'Requires Ubuntu 24.04.' >&2; exit 2; }
 export DEBIAN_FRONTEND=noninteractive

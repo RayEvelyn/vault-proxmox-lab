@@ -1,5 +1,7 @@
 # Vault on Proxmox — TLS and persistent Raft, not dev mode
 
+Start with [GitOps, the bootstrap order, and why the repos are separate](docs/START-HERE.md).
+
 This beginner lab creates an Ubuntu VM, then runs a **single-node persistent Vault server** using Raft integrated storage and TLS. SSH bootstrap is also usable on dedicated Ubuntu bare metal. The lab generates its own short-lived TLS certificate on the host; no private keys, Vault root tokens or unseal shares go into Terraform. **Review locally before deploying.**
 
 ## What Vault gives you — and what it does not
@@ -126,7 +128,7 @@ The token secret is shown once. Save it in your password manager; never paste it
 export PROXMOX_VE_ENDPOINT='https://pve.example.test:8006/'
 read -rsp 'Proxmox API token secret: ' LAB_TOKEN; printf '
 '
-export PROXMOX_VE_API_TOKEN="terraform-lab@pve!lab=$LAB_TOKEN"
+export PROXMOX_VE_API_TOKEN='terraform-lab@pve!lab='"$LAB_TOKEN"
 unset LAB_TOKEN
 cp terraform.tfvars.example terraform.tfvars
 # Edit only non-secret settings in terraform.tfvars.
