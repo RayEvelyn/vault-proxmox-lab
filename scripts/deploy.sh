@@ -15,4 +15,6 @@ remote=$(ssh "${ssh_args[@]}" "$TARGET" 'mktemp -d /tmp/homelab.XXXXXXXXXX')
 [[ "$remote" =~ ^/tmp/homelab\.[a-zA-Z0-9]{10}$ ]] || { echo 'Unexpected temporary path from target; refusing cleanup/deployment.' >&2; exit 1; }
 trap 'ssh "${ssh_args[@]}" "$TARGET" "rm -rf -- $remote"' EXIT
 scp "${ssh_args[@]}" scripts/bootstrap.sh compose.yaml "$TARGET:$remote/"
+# Values above are restricted to safe hostname/image/path characters.
+# shellcheck disable=SC2029
 ssh "${ssh_args[@]}" "${tty_args[@]}" "$TARGET" "sudo $sudo_flag bash '$remote/bootstrap.sh' '$LAB_HOSTNAME' '$IMAGE' '$remote/compose.yaml'"

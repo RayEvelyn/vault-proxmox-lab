@@ -2,6 +2,15 @@
 set -euo pipefail
 # Trusted manual deployment only. Never enable on public PR execution hosts.
 umask 077
+# GitLab file-type variables arrive as paths; GitHub secrets arrive as values.
+for name in SSH_PRIVATE_KEY SSH_KNOWN_HOSTS PROXMOX_CA_PEM; do
+  file_name="${name}_FILE"
+  if [[ -n ${!file_name:-} ]]; then
+    [[ -f ${!file_name} && ! -L ${!file_name} ]] || { echo 'Protected CI file input is invalid.' >&2; exit 2; }
+    printf -v "$name" '%s' "$(cat -- "${!file_name}")"
+    export "${name?}"
+  fi
+done
 [[ ! -e terraform.tfvars.json && ! -e terraform.tfvars ]] || { echo 'Refusing to overwrite local Terraform inputs; use clean CI checkout.' >&2; exit 2; }
 : "${TF_STATE_ROOT:?Persistent absolute directory required}"
 : "${HOMELAB_STATE_ID:?Platform-prefixed numeric repository ID required}"
@@ -29,7 +38,7 @@ for unsafe in [checkout,Path('/tmp'),Path('/var/tmp'),Path(os.environ.get('RUNNE
 PY
 state_dir="$TF_STATE_ROOT/$HOMELAB_STATE_ID"
 install -d -m 0700 "$state_dir"
-# Serialize across GitHub/GitLab invocations on the SAME permanent host.
+# Serialize deployment invocations on the SAME permanent host.
 exec 9>"$state_dir/workflow.lock"
 flock -n 9 || { echo 'Another deployment owns this state; retry after review.' >&2; exit 1; }
 work=$(mktemp -d)
@@ -84,11 +93,12 @@ terraform init -input=false -reconfigure -backend-config="path=$state_dir/terraf
 terraform validate
 terraform plan -input=false -lock-timeout=60s -out="$work/reviewed.tfplan"
 # Dispatch/manual job authorizes this run. Inspect changes in advance with a
-# separate plan-only workflow before enabling production-like apply authority.
+# separate plan-only run before enabling production-like apply authority.
 if [[ "$HOMELAB_ACTION" == plan ]]; then exit 0; fi
 terraform apply -input=false -lock-timeout=60s "$work/reviewed.tfplan"
 if [[ "$HOMELAB_ACTION" == provision ]]; then exit 0; fi
-export TARGET="ubuntu@$(terraform output -raw ssh_host)"
+TARGET="ubuntu@$(terraform output -raw ssh_host)"
+export TARGET
 # VM agent readiness is not necessarily cloud-init completion. Poll SSH without
 # bypassing pinned host keys; template SSH keys must be obtained out of band.
 for attempt in $(seq 1 30); do
