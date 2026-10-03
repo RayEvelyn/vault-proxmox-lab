@@ -1,0 +1,12 @@
+.terraform/
+*.tfstate*
+*.tfplan
+terraform.tfvars
+.env
+secrets/
+*.pem
+*.key
+*.crt
+*.tar
+*.snap
+.DS_Store

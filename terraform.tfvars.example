@@ -1,0 +1,12 @@
+vm_name = "vault-proxmox-lab"
+node_name = "pve"
+vm_id = 260
+template_id = 9000
+datastore_id = "local-lvm"
+bridge = "vmbr0"
+ip_cidr = "192.0.2.60/24"
+gateway = "192.0.2.1"
+dns_servers = ["192.0.2.1"]
+ssh_public_key_path = "/home/your-user/.ssh/id_ed25519.pub"
+cores = 2
+memory_mb = 2048

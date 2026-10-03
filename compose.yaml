@@ -1,0 +1,12 @@
+services:
+  vault:
+    image: ${IMAGE:?Set a pinned Vault image}
+    user: '100:100'
+    restart: unless-stopped
+    cap_add: [IPC_LOCK]
+    command: ['server', '-config=/vault/config/vault.hcl']
+    ports: ['8200:8200']
+    volumes:
+      - /srv/vault/config:/vault/config:ro
+      - /srv/vault/tls:/vault/tls:ro
+      - /srv/vault/data:/vault/data
