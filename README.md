@@ -76,7 +76,7 @@ Official guides: [integrated storage](https://developer.hashicorp.com/vault/docs
 
 ## What you need
 
-Use a disposable Ubuntu 24.04 x86_64 lab, working DNS, SSH public-key login, and passwordless sudo for the bootstrap account (or enter sudo interactively). Your workstation needs Terraform 1.6+, Git, OpenSSH and Python 3. Proxmox must have a bridge, storage that supports VM disks/cloud-init, and an existing Ubuntu cloud-init template with QEMU guest agent installed. The script installs Ubuntu-packaged Docker and Compose; it does not repartition disks, change SSH, DNS, firewall or existing application services. Use a dedicated empty VM or bare-metal machine.
+Use a disposable Ubuntu 24.04 x86_64 lab, working DNS, SSH public-key login, and passwordless sudo for the bootstrap account (or enter sudo interactively). Your workstation needs Terraform 1.6+, Git and OpenSSH. Proxmox must have a bridge, storage that supports VM disks/cloud-init, and an existing Ubuntu cloud-init template with QEMU guest agent installed. The script installs Ubuntu-packaged Docker and Compose; it does not repartition disks, change SSH, DNS, firewall or existing application services. Use a dedicated empty VM or bare-metal machine.
 
 Example IPs below are documentation addresses, **not routable lab values**. Replace all IPs, DNS names, node/storage IDs and public-key paths. Match your LAN CIDR and gateway; reserve addresses outside the DHCP allocation pool. Do not expose this first lab directly to the Internet.
 
